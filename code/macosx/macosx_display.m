@@ -42,8 +42,13 @@ NSDictionary *Sys_GetMatchingDisplayMode(qboolean allowStretchedModes)
     verbose = r_verbose->integer;
 
     colorDepth = r_colorbits->integer;
-    if (colorDepth < 16 || !r_fullscreen->integer)
-        colorDepth = [[glw_state.desktopMode objectForKey: (id)kCGDisplayBitsPerPixel] intValue];
+    if (colorDepth < 16 || !r_fullscreen->integer) {
+        id bpp = [glw_state.desktopMode objectForKey: (id)kCGDisplayBitsPerPixel];
+        if (bpp)
+            colorDepth = [bpp intValue];
+        if (colorDepth < 16)
+            colorDepth = 32;
+    }
 
     cMinFreq = ri.Cvar_Get("r_minDisplayRefresh", "0", CVAR_ARCHIVE);
     cMaxFreq = ri.Cvar_Get("r_maxDisplayRefresh", "0", CVAR_ARCHIVE);
@@ -64,7 +69,7 @@ NSDictionary *Sys_GetMatchingDisplayMode(qboolean allowStretchedModes)
     modeCount = [displayModes count];
     if (verbose) {
         ri.Printf(PRINT_ALL, "%d modes avaliable\n", modeCount);
-        ri.Printf(PRINT_ALL, "Current mode is %s\n", [[(id)CGDisplayCurrentMode(glw_state.display) description] cString]);
+        ri.Printf(PRINT_ALL, "Current mode is %s\n", [[(id)CGDisplayCurrentMode(glw_state.display) description] UTF8String]);
     }
     
     // Default to the current desktop mode
@@ -76,7 +81,7 @@ NSDictionary *Sys_GetMatchingDisplayMode(qboolean allowStretchedModes)
         
         mode = [displayModes objectAtIndex: modeIndex];
         if (verbose) {
-            ri.Printf(PRINT_ALL, " mode %d -- %s\n", modeIndex, [[mode description] cString]);
+            ri.Printf(PRINT_ALL, " mode %d -- %s\n", modeIndex, [[mode description] UTF8String]);
         }
 
         // Make sure we get the right size
@@ -111,10 +116,12 @@ NSDictionary *Sys_GetMatchingDisplayMode(qboolean allowStretchedModes)
             continue;
         }
 
-        if ([[mode objectForKey: (id)kCGDisplayBitsPerPixel] intValue] != colorDepth) {
-            if (verbose)
-                ri.Printf(PRINT_ALL, " -- bad depth\n");
-            continue;
+        if ([mode objectForKey: (id)kCGDisplayBitsPerPixel]) {
+            if ([[mode objectForKey: (id)kCGDisplayBitsPerPixel] intValue] != colorDepth) {
+                if (verbose)
+                    ri.Printf(PRINT_ALL, " -- bad depth\n");
+                continue;
+            }
         }
 
         bestModeIndex = modeIndex;
@@ -138,7 +145,7 @@ NSDictionary *Sys_GetMatchingDisplayMode(qboolean allowStretchedModes)
 
 void Sys_GetGammaTable(glwgamma_t *table)
 {
-    CGTableCount tableSize = 512;
+    uint32_t tableSize = 512;
     CGDisplayErr err;
     
     table->tableSize = tableSize;
@@ -191,9 +198,9 @@ void Sys_StoreGammaTables()
 //  This isn't a mathematically correct fade, but we don't care that much.
 void Sys_SetScreenFade(glwgamma_t *table, float fraction)
 {
-    CGTableCount tableSize;
+    uint32_t tableSize;
     CGGammaValue *red, *blue, *green;
-    CGTableCount gammaIndex;
+    uint32_t gammaIndex;
     
     if (!glConfig.deviceSupportsGamma)
         return;
@@ -331,7 +338,7 @@ void Sys_UnfadeScreen(CGDirectDisplayID display, glwgamma_t *table)
     Com_Printf("Unfading display 0x%08x\n", display);
 
     if (table) {
-        CGTableCount i;
+        uint32_t i;
         
         Com_Printf("Given table:\n");
         for (i = 0; i < table->tableSize; i++) {

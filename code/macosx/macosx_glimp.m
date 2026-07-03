@@ -21,6 +21,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 #import "macosx_glimp.h"
 
+#include <stdlib.h>
+#include <dlfcn.h>
 #include "tr_local.h"
 #import "macosx_local.h"
 #import "macosx_display.h"
@@ -57,7 +59,7 @@ OTStampList glThreadStampList;
 @implementation NSOpenGLContext (CGLContextAccess)
 - (CGLContextObj) cglContext;
 {
-    return _contextAuxiliary;
+    return [self CGLContextObj];
 }
 @end
 
@@ -144,7 +146,7 @@ qboolean GLimp_SetMode( qboolean isSecondTry )
 do { \
     if (attributeIndex >= attributeSize) { \
         attributeSize *= 2; \
-        pixelAttributes = NSZoneRealloc(NULL, pixelAttributes, sizeof(*pixelAttributes) * attributeSize); \
+        pixelAttributes = realloc(pixelAttributes, sizeof(*pixelAttributes) * attributeSize); \
     } \
     pixelAttributes[attributeIndex] = x; \
     attributeIndex++; \
@@ -163,7 +165,7 @@ static NSOpenGLPixelFormatAttribute *GetPixelAttributes()
     
     verbose = r_verbose->integer;
     
-    pixelAttributes = NSZoneMalloc(NULL, sizeof(*pixelAttributes) * attributeSize);
+    pixelAttributes = malloc(sizeof(*pixelAttributes) * attributeSize);
 
     if (r_fullscreen->integer) {
         ADD_ATTR(NSOpenGLPFAFullScreen);
@@ -188,8 +190,13 @@ static NSOpenGLPixelFormatAttribute *GetPixelAttributes()
         colorDepth = 16;
     else if (colorDepth > 16)
         colorDepth = 32;
-    if (!r_fullscreen->integer)
-        colorDepth = [[glw_state.desktopMode objectForKey: (id)kCGDisplayBitsPerPixel] intValue];
+    if (!r_fullscreen->integer) {
+        id bpp = [glw_state.desktopMode objectForKey: (id)kCGDisplayBitsPerPixel];
+        if (bpp)
+            colorDepth = [bpp intValue];
+        if (colorDepth < 16)
+            colorDepth = 32;
+    }
     ADD_ATTR(colorDepth);
 
     // Specify the number of depth bits
@@ -206,6 +213,40 @@ static NSOpenGLPixelFormatAttribute *GetPixelAttributes()
     ADD_ATTR(0);
     
     return pixelAttributes;
+}
+
+/*
+=================
+GLimp_SyncDrawableSize
+
+On Retina displays the OpenGL backing store is larger than the window's
+point size.  Sync glConfig to the actual drawable pixel dimensions so the
+viewport fills the framebuffer (avoids blocky/partial rendering).
+=================
+*/
+static void GLimp_SyncDrawableSize( void )
+{
+    NSView *view;
+    NSRect backingBounds;
+
+    if ( glConfig.isFullscreen || !glw_state.window ) {
+        return;
+    }
+
+    view = [glw_state.window contentView];
+    if ( [view respondsToSelector:@selector(setWantsBestResolutionOpenGLSurface:)] ) {
+        [view setWantsBestResolutionOpenGLSurface:YES];
+    }
+
+    [OSX_GetNSGLContext() update];
+    backingBounds = [view convertRectToBacking:[view bounds]];
+    if ( backingBounds.size.width < 1 || backingBounds.size.height < 1 ) {
+        return;
+    }
+
+    glConfig.vidWidth = (int)backingBounds.size.width;
+    glConfig.vidHeight = (int)backingBounds.size.height;
+    ri.Printf( PRINT_ALL, "... drawable %dx%d pixels\n", glConfig.vidWidth, glConfig.vidHeight );
 }
 
 // Needs to be visible to Q3Controller.m.
@@ -308,7 +349,7 @@ static qboolean CreateGameWindow( qboolean isSecondTry )
     // Get the GL pixel format
     pixelAttributes = GetPixelAttributes();
     pixelFormat = [[[NSOpenGLPixelFormat alloc] initWithAttributes: pixelAttributes] autorelease];
-    NSZoneFree(NULL, pixelAttributes);
+    free(pixelAttributes);
     
     if (!pixelFormat) {
         CGDisplayRestoreColorSyncSettings();
@@ -333,14 +374,21 @@ static qboolean CreateGameWindow( qboolean isSecondTry )
         cvar_t		*vid_ypos;
         NSRect           windowRect;
         
-        vid_xpos = ri.Cvar_Get( "vid_xpos", "100", CVAR_ARCHIVE );
-        vid_ypos = ri.Cvar_Get( "vid_ypos", "100", CVAR_ARCHIVE );
+        vid_xpos = ri.Cvar_Get( "vid_xpos", "0", CVAR_ARCHIVE );
+        vid_ypos = ri.Cvar_Get( "vid_ypos", "0", CVAR_ARCHIVE );
 
         // Create a window of the desired size
-        windowRect.origin.x = vid_xpos->integer;
-        windowRect.origin.y = vid_ypos->integer;
         windowRect.size.width = glConfig.vidWidth;
         windowRect.size.height = glConfig.vidHeight;
+        {
+            NSRect visible = [[NSScreen mainScreen] visibleFrame];
+            windowRect.origin.x = visible.origin.x + (visible.size.width - windowRect.size.width) / 2;
+            windowRect.origin.y = visible.origin.y + (visible.size.height - windowRect.size.height) / 2;
+        }
+        if ( vid_xpos->integer || vid_ypos->integer ) {
+            windowRect.origin.x = vid_xpos->integer;
+            windowRect.origin.y = vid_ypos->integer;
+        }
         
         glw_state.window = [[NSWindow alloc] initWithContentRect:windowRect
                                                        styleMask:NSTitledWindowMask
@@ -357,6 +405,8 @@ static qboolean CreateGameWindow( qboolean isSecondTry )
         
         // Direct the context to draw in this window
         [OSX_GetNSGLContext() setView: [glw_state.window contentView]];
+
+        GLimp_SyncDrawableSize();
 
         // Sync input rect with where the window actually is...
         Sys_UpdateWindowMouseInputRect();
@@ -415,6 +465,7 @@ void Sys_ResumeGL ()
         if (!glw_state.glPauseCount) {
             if (!glConfig.isFullscreen) {
                 [OSX_GetNSGLContext() setView: [glw_state.window contentView]];
+                GLimp_SyncDrawableSize();
             } else {
                 CGLError err;
                 
@@ -482,6 +533,13 @@ void GLimp_Init( void )
     }
     
     if ( ! GLimp_SetMode(qfalse) ) {
+        // Modern displays often lack legacy fullscreen resolutions; try windowed.
+        ri.Cvar_Set( "r_fullscreen", "0" );
+        if ( GLimp_SetMode(qfalse) ) {
+            ri.Printf( PRINT_ALL, "------------------\n" );
+            return;
+        }
+
         // fall back to the known-good mode
         ri.Cvar_Set( "r_fullscreen", "1" );
         ri.Cvar_Set( "r_mode", "3" );
@@ -681,7 +739,7 @@ void GLimp_SetGamma(unsigned char red[256],
                     unsigned char blue[256])
 {
     CGGammaValue redGamma[256], greenGamma[256], blueGamma[256];
-    CGTableCount i;
+    uint32_t i;
     CGDisplayErr err;
     
     if (!glConfig.deviceSupportsGamma)
@@ -720,26 +778,43 @@ qboolean GLimp_ChangeMode( int mode )
 
 void *qwglGetProcAddress(const char *name)
 {
-    NSSymbol symbol;
-    char *symbolName;
+    static void *openglHandle;
+    void *symbol;
 
-    // Prepend a '_' for the Unix C symbol mangling convention
-    symbolName = malloc(strlen(name) + 2);
-    strcpy(symbolName + 1, name);
-    symbolName[0] = '_';
+    if (!openglHandle) {
+        openglHandle = dlopen("/System/Library/Frameworks/OpenGL.framework/OpenGL",
+                              RTLD_LAZY | RTLD_LOCAL);
+    }
 
-    if (NSIsSymbolNameDefined(symbolName))
-        symbol = NSLookupAndBindSymbol(symbolName);
-    else
-        symbol = NULL;
-    
-    free(symbolName);
-    
-    if (!symbol)
-        // shouldn't happen ...
-        return NULL;
+    if (openglHandle) {
+        symbol = dlsym(openglHandle, name);
+        if (symbol) {
+            return symbol;
+        }
+    }
 
-    return NSAddressOfSymbol(symbol);
+#if !defined(__LP64__)
+    {
+        NSSymbol nsSymbol;
+        char *symbolName;
+
+        symbolName = malloc(strlen(name) + 2);
+        strcpy(symbolName + 1, name);
+        symbolName[0] = '_';
+
+        if (NSIsSymbolNameDefined(symbolName))
+            nsSymbol = NSLookupAndBindSymbol(symbolName);
+        else
+            nsSymbol = NULL;
+
+        free(symbolName);
+
+        if (nsSymbol)
+            return NSAddressOfSymbol(nsSymbol);
+    }
+#endif
+
+    return NULL;
 }
 
 /*

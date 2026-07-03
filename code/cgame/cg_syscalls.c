@@ -28,12 +28,19 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "cg_local.h"
 
-static int (QDECL *syscall)( int arg, ... ) = (int (QDECL *)( int, ...))-1;
+#if defined(MACOS_X) && defined(__LP64__)
+static intptr_t (QDECL *syscall)( intptr_t arg, ... ) = (intptr_t (QDECL *)( intptr_t, ...))-1;
 
+void dllEntry( intptr_t (QDECL *syscallptr)( intptr_t arg, ... ) ) {
+	syscall = syscallptr;
+}
+#else
+static int (QDECL *syscall)( int arg, ... ) = (int (QDECL *)( int, ...))-1;
 
 void dllEntry( int (QDECL  *syscallptr)( int arg,... ) ) {
 	syscall = syscallptr;
 }
+#endif
 
 
 int PASSFLOAT( float x ) {

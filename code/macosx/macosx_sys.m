@@ -54,7 +54,14 @@ int main(int argc, const char *argv[]) {
     [controller quakeMain];
     return 0;
 #else
-    return NSApplicationMain(argc, argv);
+    @autoreleasepool {
+        [NSApplication sharedApplication];
+        [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+        Q3Controller *controller = [[Q3Controller alloc] init];
+        [NSApp setDelegate:controller];
+        [NSApp run];
+    }
+    return 0;
 #endif
 }
 
@@ -82,27 +89,32 @@ Used to load a development dll instead of a virtual machine
 */
 extern char		*FS_BuildOSPath( const char *base, const char *game, const char *qpath );
 
-void	* QDECL Sys_LoadDll( const char *name, char *fqpath , int (QDECL **entryPoint)(int, ...),
+void	* QDECL Sys_LoadDll( const char *name, char *fqpath , vmMainFunc_t *entryPoint,
+#if defined(MACOS_X) && defined(__LP64__)
+				  vmSyscallFunc_t systemcalls ) {
+    void *libHandle;
+    void	(*dllEntry)( vmSyscallFunc_t syscallptr );
+#else
 				  int (QDECL *systemcalls)(int, ...) ) {
     void *libHandle;
     void	(*dllEntry)( int (*syscallptr)(int, ...) );
-    NSString *bundlePath, *libraryPath;
+#endif
+    NSString *libraryPath;
     const char *path;
+    NSString *exeDir;
     
-	// TTimo
-	// I don't understand the search strategy here. How can the Quake3 bundle know about the location
-	// of the other bundles? is that configured somewhere in XCode?
-	/*
-    bundlePath = [[NSBundle mainBundle] pathForResource: [NSString stringWithCString: name] ofType: @"bundle"];
-    libraryPath = [NSString stringWithFormat: @"%@/Contents/MacOS/%s", bundlePath, name];
-	*/	
-	libraryPath = [NSString stringWithFormat: @"%s.bundle/Contents/MacOS/%s", name, name];
+    exeDir = [[[NSBundle mainBundle] executablePath] stringByDeletingLastPathComponent];
+    libraryPath = [exeDir stringByAppendingPathComponent:
+        [NSString stringWithFormat:@"%s.bundle/Contents/MacOS/%s", name, name]];
     if (!libraryPath)
         return NULL;
     
-    path = [libraryPath cString];
+    path = [libraryPath UTF8String];
+    if (fqpath) {
+        Q_strncpyz(fqpath, path, MAX_OSPATH);
+    }
     Com_Printf("Loading '%s'.\n", path);
-    libHandle = dlopen( [libraryPath cString], RTLD_LAZY );
+    libHandle = dlopen( path, RTLD_LAZY );
     if (!libHandle) {
         libHandle = dlopen( name, RTLD_LAZY );
         if (!libHandle) {
@@ -111,14 +123,14 @@ void	* QDECL Sys_LoadDll( const char *name, char *fqpath , int (QDECL **entryPoi
         }
     }
 
-    dllEntry = dlsym( libHandle, "_dllEntry" );
+    dllEntry = dlsym( libHandle, "dllEntry" );
     if (!dllEntry) {
         Com_Printf("Error loading dll:  No dllEntry symbol.\n");
         dlclose(libHandle);
         return NULL;
     }
     
-    *entryPoint = dlsym( libHandle, "_vmMain" );
+    *entryPoint = (vmMainFunc_t)dlsym( libHandle, "vmMain" );
     if (!*entryPoint) {
         Com_Printf("Error loading dll:  No vmMain symbol.\n");
         dlclose(libHandle);
@@ -138,12 +150,12 @@ char *Sys_GetClipboardData(void) // FIXME
 
     pasteboard = [NSPasteboard generalPasteboard];
     pasteboardTypes = [pasteboard types];
-    if ([pasteboardTypes containsObject:NSStringPboardType]) {
+    if ([pasteboardTypes containsObject:NSPasteboardTypeString]) {
         NSString *clipboardString;
 
-        clipboardString = [pasteboard stringForType:NSStringPboardType];
+        clipboardString = [pasteboard stringForType:NSPasteboardTypeString];
         if (clipboardString && [clipboardString length] > 0) {
-            return strdup([clipboardString cString]);
+            return strdup([clipboardString UTF8String]);
         }
     }
     return NULL;
@@ -228,7 +240,7 @@ void Sys_Error(const char *error, ...)
     Sys_Shutdown();
 
     va_start(argptr,error);
-    formattedString = [[NSString alloc] initWithFormat:[NSString stringWithCString:error] arguments:argptr];
+    formattedString = [[NSString alloc] initWithFormat:[NSString stringWithUTF8String:error] arguments:argptr];
     va_end(argptr);
 
     NSLog(@"Sys_Error: %@", formattedString);

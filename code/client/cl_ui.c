@@ -758,17 +758,15 @@ static int FloatAsInt( float f ) {
 }
 
 void *VM_ArgPtr( int intValue );
+#if defined(MACOS_X) && defined(__LP64__)
+#define	VMA(x) ((void *)args[x])
+#define	VMF(x)	(*(float *)&args[x])
+intptr_t CL_UISystemCalls( intptr_t *args ) {
+#else
 #define	VMA(x) VM_ArgPtr(args[x])
 #define	VMF(x)	((float *)args)[x]
-
-/*
-====================
-CL_UISystemCalls
-
-The ui module is making a system call
-====================
-*/
 int CL_UISystemCalls( int *args ) {
+#endif
 	switch( args[0] ) {
 	case UI_ERROR:
 		Com_Error( ERR_DROP, "%s", VMA(1) );

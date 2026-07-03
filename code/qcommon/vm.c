@@ -64,9 +64,15 @@ VM_Init
 ==============
 */
 void VM_Init( void ) {
+#if defined(MACOS_X)
+	Cvar_Get( "vm_cgame", "0", CVAR_ARCHIVE );
+	Cvar_Get( "vm_game", "0", CVAR_ARCHIVE );
+	Cvar_Get( "vm_ui", "0", CVAR_ARCHIVE );
+#else
 	Cvar_Get( "vm_cgame", "2", CVAR_ARCHIVE );	// !@# SHIP WITH SET TO 2
 	Cvar_Get( "vm_game", "2", CVAR_ARCHIVE );	// !@# SHIP WITH SET TO 2
 	Cvar_Get( "vm_ui", "2", CVAR_ARCHIVE );		// !@# SHIP WITH SET TO 2
+#endif
 
 	Cmd_AddCommand ("vmprofile", VM_VmProfile_f );
 	Cmd_AddCommand ("vminfo", VM_VmInfo_f );
@@ -324,10 +330,26 @@ Dlls will call this directly
  
 ============
 */
+#if defined(MACOS_X) && defined(__LP64__)
+intptr_t QDECL VM_DllSyscall( intptr_t arg, ... ) {
+	intptr_t args[16];
+	int i;
+	va_list ap;
+
+	args[0] = arg;
+
+	va_start(ap, arg);
+	for (i = 1; i < (int)(sizeof(args) / sizeof(args[0])); i++) {
+		args[i] = va_arg(ap, intptr_t);
+	}
+	va_end(ap);
+
+	return currentVM->systemCall( args );
+}
+#else
 int QDECL VM_DllSyscall( int arg, ... ) {
 #if ((defined __linux__) && (defined __powerpc__))
-  // rcg010206 - see commentary above
-  int args[16];
+  intptr_t args[16];
   int i;
   va_list ap;
   
@@ -335,14 +357,15 @@ int QDECL VM_DllSyscall( int arg, ... ) {
   
   va_start(ap, arg);
   for (i = 1; i < sizeof (args) / sizeof (args[i]); i++)
-    args[i] = va_arg(ap, int);
+    args[i] = va_arg(ap, intptr_t);
   va_end(ap);
   
-  return currentVM->systemCall( args );
+  return currentVM->systemCall( (int *)args );
 #else // original id code
 	return currentVM->systemCall( &arg );
 #endif
 }
+#endif
 
 /*
 =================
@@ -362,7 +385,7 @@ vm_t *VM_Restart( vm_t *vm ) {
 	// DLL's can't be restarted in place
 	if ( vm->dllHandle ) {
 		char	name[MAX_QPATH];
-	    int			(*systemCall)( int *parms );
+		vmSystemCall_t	systemCall;
 		
 		systemCall = vm->systemCall;	
 		Q_strncpyz( name, vm->name, sizeof( name ) );
@@ -432,7 +455,7 @@ it will attempt to load as a system dll
 
 #define	STACK_SIZE	0x20000
 
-vm_t *VM_Create( const char *module, int (*systemCalls)(int *), 
+vm_t *VM_Create( const char *module, vmSystemCall_t systemCalls,
 				vmInterpret_t interpret ) {
 	vm_t		*vm;
 	vmHeader_t	*header;
@@ -613,14 +636,18 @@ void *VM_ArgPtr( int intValue ) {
 	  return NULL;
 
 	if ( currentVM->entryPoint ) {
+#if defined(MACOS_X) && defined(__LP64__)
+		return (void *)(intptr_t)intValue;
+#else
 		return (void *)(currentVM->dataBase + intValue);
+#endif
 	}
 	else {
 		return (void *)(currentVM->dataBase + (intValue & currentVM->dataMask));
 	}
 }
 
-void *VM_ExplicitArgPtr( vm_t *vm, int intValue ) {
+void *VM_ExplicitArgPtr( vm_t *vm, vmCallResult_t intValue ) {
 	if ( !intValue ) {
 		return NULL;
 	}
@@ -631,7 +658,11 @@ void *VM_ExplicitArgPtr( vm_t *vm, int intValue ) {
 
 	//
 	if ( vm->entryPoint ) {
+#if defined(MACOS_X) && defined(__LP64__)
+		return (void *)(intptr_t)intValue;
+#else
 		return (void *)(vm->dataBase + intValue);
+#endif
 	}
 	else {
 		return (void *)(vm->dataBase + (intValue & vm->dataMask));
@@ -665,11 +696,13 @@ locals from sp
 #define	MAX_STACK	256
 #define	STACK_MASK	(MAX_STACK-1)
 
-int	QDECL VM_Call( vm_t *vm, int callnum, ... ) {
+#define	MAX_VMMAIN_ARGS	13
+
+vmCallResult_t	QDECL VM_Call( vm_t *vm, int callnum, ... ) {
 	vm_t	*oldVM;
-	int		r;
+	vmCallResult_t	r;
 	int i;
-	int args[16];
+	int args[MAX_VMMAIN_ARGS - 1];
 	va_list ap;
 
 
@@ -687,17 +720,32 @@ int	QDECL VM_Call( vm_t *vm, int callnum, ... ) {
 
 	// if we have a dll loaded, call it directly
 	if ( vm->entryPoint ) {
-		//rcg010207 -  see dissertation at top of VM_DllSyscall() in this file.
+#if defined(MACOS_X) && defined(__LP64__)
+		intptr_t iargs[MAX_VMMAIN_ARGS - 1];
+
+		Com_Memset( iargs, 0, sizeof( iargs ) );
 		va_start(ap, callnum);
-		for (i = 0; i < sizeof (args) / sizeof (args[i]); i++) {
+		for (i = 0; i < (int)(sizeof(iargs) / sizeof(iargs[0])); i++) {
+			iargs[i] = va_arg(ap, intptr_t);
+		}
+		va_end(ap);
+
+		r = vm->entryPoint( callnum,
+			iargs[0], iargs[1], iargs[2], iargs[3],
+			iargs[4], iargs[5], iargs[6], iargs[7],
+			iargs[8], iargs[9], iargs[10], iargs[11] );
+#else
+		Com_Memset( args, 0, sizeof( args ) );
+		va_start(ap, callnum);
+		for (i = 0; i < (int)(sizeof(args) / sizeof(args[0])); i++) {
 			args[i] = va_arg(ap, int);
 		}
 		va_end(ap);
 
 		r = vm->entryPoint( callnum,  args[0],  args[1],  args[2], args[3],
                             args[4],  args[5],  args[6], args[7],
-                            args[8],  args[9], args[10], args[11],
-                            args[12], args[13], args[14], args[15]);
+                            args[8],  args[9], args[10], args[11]);
+#endif
 	} else if ( vm->compiled ) {
 		r = VM_CallCompiled( vm, &callnum );
 	} else {
@@ -833,3 +881,13 @@ int	VM_CallCompiled( vm_t *vm, int *args ) {
 
 void VM_Compile( vm_t *vm, vmHeader_t *header ) {}
 #endif // DLL_ONLY
+
+#if defined(MACOS_X) && !id386 && !idppc
+int VM_CallCompiled( vm_t *vm, int *args ) {
+	return VM_CallInterpreted( vm, args );
+}
+
+void VM_Compile( vm_t *vm, vmHeader_t *header ) {
+	VM_PrepareInterpreter( vm, header );
+}
+#endif

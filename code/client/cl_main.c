@@ -2001,9 +2001,11 @@ void CL_Frame ( int msec ) {
 	}
 
 	if ( cls.cddialog ) {
-		// bring up the cd error dialog if needed
+		// CD checks are not used on modern macOS builds
 		cls.cddialog = qfalse;
+#if !defined(MACOS_X)
 		VM_Call( uivm, UI_SET_ACTIVE_MENU, UIMENU_NEED_CD );
+#endif
 	} else	if ( cls.state == CA_DISCONNECTED && !( cls.keyCatchers & KEYCATCH_UI )
 		&& !com_sv_running->integer ) {
 		// if disconnected, bring up the menu
@@ -3263,6 +3265,9 @@ bool CL_CDKeyValidate
 =================
 */
 qboolean CL_CDKeyValidate( const char *key, const char *checksum ) {
+#if defined(MACOS_X)
+	return qtrue;
+#else
 	char	ch;
 	byte	sum;
 	char	chs[3];
@@ -3319,6 +3324,7 @@ qboolean CL_CDKeyValidate( const char *key, const char *checksum ) {
 	}
 
 	return qfalse;
+#endif
 }
 
 

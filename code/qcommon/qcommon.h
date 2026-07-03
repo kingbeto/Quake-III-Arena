@@ -309,8 +309,14 @@ typedef enum {
 	TRAP_TESTPRINTFLOAT
 } sharedTraps_t;
 
+#if defined(MACOS_X) && defined(__LP64__)
+typedef intptr_t (QDECL *vmSystemCall_t)( intptr_t *parms );
+#else
+typedef int (QDECL *vmSystemCall_t)( int *parms );
+#endif
+
 void	VM_Init( void );
-vm_t	*VM_Create( const char *module, int (*systemCalls)(int *), 
+vm_t	*VM_Create( const char *module, vmSystemCall_t systemCalls,
 				   vmInterpret_t interpret );
 // module should be bare: "cgame", not "cgame.dll" or "vm/cgame.qvm"
 
@@ -318,12 +324,22 @@ void	VM_Free( vm_t *vm );
 void	VM_Clear(void);
 vm_t	*VM_Restart( vm_t *vm );
 
+#if defined(MACOS_X) && defined(__LP64__)
+typedef intptr_t vmCallResult_t;
+intptr_t	QDECL VM_Call( vm_t *vm, int callNum, ... );
+#else
+typedef int vmCallResult_t;
 int		QDECL VM_Call( vm_t *vm, int callNum, ... );
+#endif
 
 void	VM_Debug( int level );
 
 void	*VM_ArgPtr( int intValue );
+#if defined(MACOS_X) && defined(__LP64__)
+void	*VM_ExplicitArgPtr( vm_t *vm, vmCallResult_t intValue );
+#else
 void	*VM_ExplicitArgPtr( vm_t *vm, int intValue );
+#endif
 
 /*
 ==============================================================
@@ -936,8 +952,19 @@ void	Sys_Init (void);
 
 // general development dll loading for virtual machine testing
 // fqpath param added 7/20/02 by T.Ray - Sys_LoadDll is only called in vm.c at this time
-void	* QDECL Sys_LoadDll( const char *name, char *fqpath , int (QDECL **entryPoint)(int, ...),
+#if defined(MACOS_X) && defined(__LP64__)
+typedef intptr_t (QDECL *vmMainFunc_t)( intptr_t callNum,
+	intptr_t arg0, intptr_t arg1, intptr_t arg2, intptr_t arg3,
+	intptr_t arg4, intptr_t arg5, intptr_t arg6, intptr_t arg7,
+	intptr_t arg8, intptr_t arg9, intptr_t arg10, intptr_t arg11 );
+typedef intptr_t (QDECL *vmSyscallFunc_t)( intptr_t arg, ... );
+void	* QDECL Sys_LoadDll( const char *name, char *fqpath , vmMainFunc_t *entryPoint,
+				  vmSyscallFunc_t systemcalls );
+#else
+typedef int (QDECL *vmMainFunc_t)( int callNum, ... );
+void	* QDECL Sys_LoadDll( const char *name, char *fqpath , vmMainFunc_t *entryPoint,
 				  int (QDECL *systemcalls)(int, ...) );
+#endif
 void	Sys_UnloadDll( void *dllHandle );
 
 void	Sys_UnloadGame( void );

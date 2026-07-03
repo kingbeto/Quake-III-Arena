@@ -23,6 +23,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "../game/q_shared.h"
 #include "qcommon.h"
+#include <stddef.h>
 #include <setjmp.h>
 #ifdef __linux__
 #include <netinet/in.h>
@@ -1527,7 +1528,7 @@ void Com_InitHunkMemory( void ) {
 		Com_Error( ERR_FATAL, "Hunk data failed to allocate %i megs", s_hunkTotal / (1024*1024) );
 	}
 	// cacheline align
-	s_hunkData = (byte *) ( ( (int)s_hunkData + 31 ) & ~31 );
+	s_hunkData = (byte *) ( ( (size_t)s_hunkData + 31 ) & ~(size_t)31 );
 	Hunk_Clear();
 
 	Cmd_AddCommand( "meminfo", Com_Meminfo_f );
@@ -3314,4 +3315,12 @@ void Field_CompleteCommand( field_t *field ) {
 	// run through again, printing matches
 	Cmd_CommandCompletion( PrintMatches );
 	Cvar_CommandCompletion( PrintMatches );
+}
+
+void *Com_Allocate( int bytes ) {
+	return Z_Malloc( bytes );
+}
+
+void Com_Dealloc( void *ptr ) {
+	Z_Free( ptr );
 }

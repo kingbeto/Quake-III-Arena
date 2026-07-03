@@ -190,4 +190,29 @@ a typical compile command goes like this:
 COMPILING ON MAC
 ================
 
-project file for OSX compile is in code/macosx/Quake3.pbproj
+Apple Silicon (arm64) — from code/macosx/:
+
+  make
+
+Intel Macs: make ARCH=x86_64
+
+Output: build/Quake3.app (engine + qagame/cgame/ui bundles).
+
+Game data (not included in this GPL source release): you need a legal copy of
+Quake III Arena. The app looks for baseq3/*.pk3. Either:
+
+  - Put baseq3/ next to Quake3.app (same folder as the .app), or
+  - On first launch, select the install folder that contains baseq3/
+    (e.g. Steam: .../steamapps/common/Quake 3 Arena — not the baseq3 folder).
+
+The port defaults to windowed mode (legacy OpenGL fullscreen is unreliable on
+modern macOS). Toggle fullscreen in-game with r_fullscreen if desired.
+
+Mouse input does not apply legacy macOS mouse scaling; sensitivity may differ
+from the original Mac release.
+
+Distribution: unsigned builds are blocked by Gatekeeper on other machines.
+For sharing, sign and notarize the .app (codesign, notarytool) or instruct
+users to right-click → Open on first launch.
+
+Legacy Xcode project (PowerPC): code/macosx/Quake3.pbproj

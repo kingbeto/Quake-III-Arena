@@ -36,6 +36,58 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 static qboolean Sys_IsProcessingTerminationRequest = qfalse;
 static void Sys_CreatePathToFile(NSString *path, NSDictionary *attributes);
+static BOOL Q3_HasGameDataAtPath(NSString *installationPath);
+static NSArray *Q3_InstallPathCandidates(NSString *savedPath);
+
+static BOOL Q3_HasGameDataAtPath(NSString *installationPath)
+{
+    NSFileManager *fm;
+    NSString *dataPath;
+    NSArray *files;
+    NSUInteger i;
+
+    if (!installationPath)
+        return NO;
+
+    fm = [NSFileManager defaultManager];
+    dataPath = [installationPath stringByAppendingPathComponent:@"baseq3"];
+    if (![fm fileExistsAtPath:dataPath])
+        return NO;
+
+    files = [fm contentsOfDirectoryAtPath:dataPath error:NULL];
+    if (!files)
+        return NO;
+
+    for (i = 0; i < [files count]; i++) {
+        if ([[files objectAtIndex:i] hasSuffix:@"pk3"])
+            return YES;
+    }
+    return NO;
+}
+
+static NSArray *Q3_InstallPathCandidates(NSString *savedPath)
+{
+    NSMutableArray *candidates;
+    NSString *home, *appParent, *path;
+
+    candidates = [NSMutableArray array];
+    if (savedPath)
+        [candidates addObject:savedPath];
+
+    appParent = [[[NSBundle mainBundle] bundlePath] stringByDeletingLastPathComponent];
+    [candidates addObject:appParent];
+
+    home = NSHomeDirectory();
+    [candidates addObject:[home stringByAppendingPathComponent:@"Library/Application Support/Steam/steamapps/common/Quake 3 Arena"]];
+    [candidates addObject:@"/Applications/Quake III Arena"];
+    [candidates addObject:@"/Applications/Quake 3 Arena"];
+
+    for (path in candidates) {
+        if (Q3_HasGameDataAtPath(path))
+            return [NSArray arrayWithObject:path];
+    }
+    return candidates;
+}
 
 @interface Q3Controller (Private)
 - (void)quakeMain;
@@ -47,11 +99,11 @@ static void Sys_CreatePathToFile(NSString *path, NSDictionary *attributes);
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification;
 {
-    NS_DURING {
+    @try {
         [self quakeMain];
-    } NS_HANDLER {
-        Sys_Error("%@", [localException reason]);
-    } NS_ENDHANDLER;
+    } @catch (NSException *localException) {
+        Sys_Error("%s", [[localException reason] UTF8String]);
+    }
     Sys_Quit();
 }
 
@@ -136,7 +188,7 @@ extern void CL_Quit_f(void);
             bannerImage = [[NSImage alloc] initWithContentsOfFile:[[NSBundle mainBundle] pathForImageResource:@"banner.jpg"]];
             bannerRect = NSMakeRect(0.0, 0.0, [bannerImage size].width, [bannerImage size].height);
             
-            splashPanel = [[NSPanel alloc] initWithContentRect:bannerRect styleMask:NSBorderlessWindowMask backing:NSBackingStoreBuffered defer:NO];
+            splashPanel = [[NSPanel alloc] initWithContentRect:bannerRect styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
             
             bannerImageView = [[NSImageView alloc] initWithFrame:bannerRect];
             [bannerImageView setImage:bannerImage];
@@ -161,12 +213,12 @@ extern void CL_Quit_f(void);
     NSArray *pasteboardTypes;
 
     pasteboardTypes = [pasteboard types];
-    if ([pasteboardTypes containsObject:NSStringPboardType]) {
+    if ([pasteboardTypes containsObject:NSPasteboardTypeString]) {
         NSString *requestedServer;
 
-        requestedServer = [pasteboard stringForType:NSStringPboardType];
+        requestedServer = [pasteboard stringForType:NSPasteboardTypeString];
         if (requestedServer) {
-            Cbuf_AddText(va("connect %s\n", [requestedServer cString]));
+            Cbuf_AddText(va("connect %s\n", [requestedServer UTF8String]));
             return;
         }
     }
@@ -178,12 +230,12 @@ extern void CL_Quit_f(void);
     NSArray *pasteboardTypes;
 
     pasteboardTypes = [pasteboard types];
-    if ([pasteboardTypes containsObject:NSStringPboardType]) {
+    if ([pasteboardTypes containsObject:NSPasteboardTypeString]) {
         NSString *requestedCommand;
 
-        requestedCommand = [pasteboard stringForType:NSStringPboardType];
+        requestedCommand = [pasteboard stringForType:NSPasteboardTypeString];
         if (requestedCommand) {
-            Cbuf_AddText(va("%s\n", [requestedCommand cString]));
+            Cbuf_AddText(va("%s\n", [requestedCommand UTF8String]));
             return;
         }
     }
@@ -200,7 +252,6 @@ extern void CL_Quit_f(void);
     NSProcessInfo *processInfo;
     NSArray *arguments;
     unsigned int argumentIndex, argumentCount;
-    NSFileManager *defaultManager;
     unsigned int commandLineLength;
     NSString *installationPathKey, *installationPath;
     char *cmdline;
@@ -222,16 +273,33 @@ extern void CL_Quit_f(void);
         if ([arg hasPrefix: @"-psn_"])
             continue;
             
-        argv[argc++] = strdup([arg cString]);
+        argv[argc++] = strdup([arg UTF8String]);
     }
     
     // Figure out where the level data is stored.
     installationPathKey = @"RetailInstallationPath";
 
     installationPath = [[NSUserDefaults standardUserDefaults] objectForKey:installationPathKey];
+    if (installationPath && !Q3_HasGameDataAtPath(installationPath)) {
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:installationPathKey];
+        installationPath = nil;
+    }
     if (!installationPath) {
-        // Default to the directory containing the executable (which is where most users will want to put it
-        installationPath = [[[NSBundle mainBundle] bundlePath] stringByDeletingLastPathComponent];
+        NSArray *candidates;
+        NSUInteger i;
+
+        candidates = Q3_InstallPathCandidates(nil);
+        for (i = 0; i < [candidates count]; i++) {
+            NSString *candidate;
+
+            candidate = [candidates objectAtIndex:i];
+            if (Q3_HasGameDataAtPath(candidate)) {
+                installationPath = candidate;
+                break;
+            }
+        }
+        if (!installationPath)
+            installationPath = [candidates objectAtIndex:0];
     }
 
 #if !defined(DEDICATED)    
@@ -243,31 +311,11 @@ extern void CL_Quit_f(void);
     demoAppName = appName;
 
     while (YES) {
-        NSString *dataPath;
         NSOpenPanel *openPanel;
         int result;
-        
-        foundDirectory = NO;
-        defaultManager = [NSFileManager defaultManager];
-        //NSLog(@"Candidate installation path = %@", installationPath);
-        dataPath = [installationPath stringByAppendingPathComponent: @"baseq3"];
-        
-        if ([defaultManager fileExistsAtPath: dataPath]) {
-            // Check that the data directory contains at least one .pk3 file.  We don't know what it will be named, so don't hard code a name (for example it might be named 'french.pk3' for a French release
-            NSArray *files;
-            unsigned int fileIndex;
-            
-            files = [defaultManager directoryContentsAtPath: dataPath];
-            fileIndex = [files count];
-            while (fileIndex--) {
-                if ([[files objectAtIndex: fileIndex] hasSuffix: @"pk3"]) {
-                    //NSLog(@"Found %@.", [files objectAtIndex: fileIndex]);
-                    foundDirectory = YES;
-                    break;
-                }
-            }
-        }
-        
+
+        foundDirectory = Q3_HasGameDataAtPath(installationPath);
+
         if (foundDirectory)
             break;
 
@@ -280,7 +328,13 @@ extern void CL_Quit_f(void);
 #else
         selectButton = @"Select Retail Installation...";
 
-        result = NSRunAlertPanel(demoAppName, @"You need to select the installation directory for %@ (not any directory inside of it -- the installation directory itself).", selectButton, @"Quit", nil, appName);
+        result = NSRunAlertPanel(demoAppName,
+            @"%@ needs game data (.pk3 files from a legal copy).\n\n"
+            @"Select the folder that contains baseq3/ — not baseq3 itself.\n"
+            @"Example: if files are in .../Quake 3 Arena/baseq3/, choose .../Quake 3 Arena.\n\n"
+            @"Or copy baseq3/ next to Quake3.app in:\n%@",
+            selectButton, @"Quit", nil, appName,
+            [[[NSBundle mainBundle] bundlePath] stringByDeletingLastPathComponent]);
         switch (result) {
             case NSAlertDefaultReturn:
                 break;
@@ -293,13 +347,10 @@ extern void CL_Quit_f(void);
         [openPanel setAllowsMultipleSelection:NO];
         [openPanel setCanChooseDirectories:YES];
         [openPanel setCanChooseFiles:NO];
-        result = [openPanel runModalForDirectory:nil file:nil];
-        if (result == NSOKButton) {
-            NSArray *filenames;
-
-            filenames = [openPanel filenames];
-            if ([filenames count] == 1) {
-                installationPath = [filenames objectAtIndex:0];
+        if ([openPanel runModal] == NSModalResponseOK) {
+            NSURL *url = [openPanel URL];
+            if (url) {
+                installationPath = [url path];
                 [[NSUserDefaults standardUserDefaults] setObject:installationPath forKey:installationPathKey];
                 [[NSUserDefaults standardUserDefaults] synchronize];
             }
@@ -323,23 +374,23 @@ extern void CL_Quit_f(void);
         filePath = [homePath stringByAppendingPathComponent: @"foo"];
         
         attributes = [NSDictionary dictionaryWithObjectsAndKeys: [NSNumber numberWithUnsignedInt: 0750], NSFilePosixPermissions, nil];
-        NS_DURING {
+        @try {
             Sys_CreatePathToFile(filePath, attributes);
-            Sys_SetDefaultHomePath([homePath fileSystemRepresentation]);
-        } NS_HANDLER {
+            Sys_SetDefaultHomePath([homePath UTF8String]);
+        } @catch (NSException *localException) {
             NSLog(@"Exception: %@", localException);
 #ifndef DEDICATED
             NSRunAlertPanel(nil, @"Unable to create '%@'.  Please make sure that you have permission to write to this folder and re-run the game.", @"OK", nil, nil, homePath);
 #endif
             Sys_Quit();
-        } NS_ENDHANDLER;
+        }
     } while(0);
     
     // Provoke the CD scanning code into looking up the CD.
     Sys_CheckCD();
     
     // Let the filesystem know where our local install is
-    Sys_SetDefaultInstallPath([installationPath cString]);
+    Sys_SetDefaultInstallPath([installationPath UTF8String]);
 
     cmdline = NULL;
 #if 0

@@ -32,7 +32,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #import "macosx_timers.h"
 #import "macosx_display.h" // For Sys_SetScreenFade
 
-#import <drivers/event_status_driver.h>
 #import <sys/types.h>
 #import <sys/time.h>
 #import <unistd.h>
@@ -53,7 +52,6 @@ static void Sys_StopMouseInput();
 static qboolean mouseactive = qfalse;
 static BOOL inputRectValid = NO;
 static CGRect inputRect;
-static NXMouseScaling originalScaling;
 
 static unsigned int currentModifierFlags;
 
@@ -66,13 +64,13 @@ static void Sys_PreventMouseMovement(CGPoint point)
     //Com_Printf("**** Calling CGAssociateMouseAndMouseCursorPosition(false)\n");
     err = CGAssociateMouseAndMouseCursorPosition(false);
     if (err != CGEventNoErr) {
-        Sys_Error("Could not disable mouse movement, CGAssociateMouseAndMouseCursorPosition returned %d\n", err);
+        Com_Printf("WARNING: CGAssociateMouseAndMouseCursorPosition(false) returned %d — mouse capture may not work (grant Accessibility permission in System Settings)\n", err);
     }
 
     // Put the mouse in the position we want to leave it at
     err = CGWarpMouseCursorPosition(point);
     if (err != CGEventNoErr) {
-        Sys_Error("Could not disable mouse movement, CGWarpMouseCursorPosition returned %d\n", err);
+        Com_Printf("WARNING: CGWarpMouseCursorPosition returned %d\n", err);
     }
 }
 
@@ -84,7 +82,7 @@ static void Sys_ReenableMouseMovement()
     
     err = CGAssociateMouseAndMouseCursorPosition(true);
     if (err != CGEventNoErr) {
-        Sys_Error("Could not reenable mouse movement, CGAssociateMouseAndMouseCursorPosition returned %d\n", err);
+        Com_Printf("WARNING: CGAssociateMouseAndMouseCursorPosition(true) returned %d\n", err);
     }
     
     // Leave the mouse where it was -- don't warp here.
@@ -109,7 +107,7 @@ void Sys_InitInput(void)
     // For hide support.  If we don't do this, then the command key will get stuck on when we hide (since we won't get the flags changed event when it goes up).
     currentModifierFlags = 0;
     
-    r_fullscreen = Cvar_Get( "r_fullscreen", "1", CVAR_ARCHIVE | CVAR_LATCH );
+    r_fullscreen = Cvar_Get( "r_fullscreen", "0", CVAR_ARCHIVE | CVAR_LATCH );
     in_nomouse = Cvar_Get( "in_nomouse", "0", 0 );
     in_showevents = Cvar_Get( "in_showevents", "0", 0 );
 
@@ -181,8 +179,7 @@ extern void Sys_UpdateWindowMouseInputRect(void);
 
 static void Sys_StartMouseInput()
 {
-    NXEventHandle eventStatus;
-    CGMouseDelta dx, dy;
+    int dx, dy;
 
     if (mouseactive) {
         //Com_Printf("**** Attempted to start mouse input while already started\n");
@@ -201,24 +198,14 @@ static void Sys_StartMouseInput()
     // Grab any mouse delta information to reset the last delta buffer
     CGGetLastMouseDelta(&dx, &dy);
     
-    // Turn off mouse scaling
-    if (in_disableOSMouseScaling->integer==0 && (eventStatus = NXOpenEventStatus())) {
-        NXMouseScaling newScaling;
-
-        NXGetMouseScaling(eventStatus, &originalScaling);
-        newScaling.numScaleLevels = 1;
-        newScaling.scaleThresholds[0] = 1;
-        newScaling.scaleFactors[0] = -1;
-        NXSetMouseScaling(eventStatus, &newScaling);
-        NXCloseEventStatus(eventStatus);
-    }
+    // Legacy NX mouse scaling APIs removed on modern macOS.
+    (void)in_disableOSMouseScaling;
     
     [NSCursor hide];
 }
 
 static void Sys_StopMouseInput()
 {
-    NXEventHandle eventStatus;
     if (!mouseactive) {
         //Com_Printf("**** Attempted to stop mouse input while already stopped\n");
         return;
@@ -226,11 +213,8 @@ static void Sys_StopMouseInput()
     
     Com_Printf("Stopping mouse input\n");
     
-    // Restore mouse scaling
-    if (in_disableOSMouseScaling->integer == 0 && (eventStatus = NXOpenEventStatus())) {
-        NXSetMouseScaling(eventStatus, &originalScaling);
-        NXCloseEventStatus(eventStatus);
-    }
+    // Legacy NX mouse scaling APIs removed on modern macOS.
+    (void)in_disableOSMouseScaling;
 
     mouseactive = qfalse;
     Sys_ReenableMouseMovement();

@@ -127,7 +127,11 @@ struct vm_s {
     // DO NOT MOVE OR CHANGE THESE WITHOUT CHANGING THE VM_OFFSET_* DEFINES
     // USED BY THE ASM CODE
     int			programStack;		// the vm may be recursively entered
+#if defined(MACOS_X) && defined(__LP64__)
+    intptr_t	(*systemCall)( intptr_t *parms );
+#else
     int			(*systemCall)( int *parms );
+#endif
 
 	//------------------------------------
    
@@ -135,7 +139,7 @@ struct vm_s {
 
 	// for dynamic linked modules
 	void		*dllHandle;
-	int			(QDECL *entryPoint)( int callNum, ... );
+	vmMainFunc_t	entryPoint;
 
 	// for interpreted modules
 	qboolean	currentlyInterpreting;

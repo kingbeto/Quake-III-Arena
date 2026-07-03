@@ -27,7 +27,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include <CoreServices/CoreServices.h>
 #include <CoreAudio/AudioHardware.h>
-#include <QuickTime/QuickTime.h>
 
 // For 'ri'
 #include "../renderer/tr_local.h"
@@ -304,7 +303,7 @@ void SNDDMA_Shutdown(void)
     
     free(s_mixedSamples);
     s_mixedSamples = NULL;
-    dma.samples = NULL;
+    dma.samples = 0;
 }
 
 /*

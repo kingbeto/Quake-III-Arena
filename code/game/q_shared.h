@@ -87,7 +87,14 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <time.h>
 #include <ctype.h>
 #include <limits.h>
+#include <stdint.h>
 
+#endif
+
+#if defined(MACOS_X) && defined(__LP64__) && !defined(Q3_VM)
+#define VMMAIN_RETURN_TYPE	intptr_t
+#else
+#define VMMAIN_RETURN_TYPE	int
 #endif
 
 #ifdef _WIN32
@@ -171,9 +178,11 @@ static ID_INLINE float BigFloat(const float *l) { FloatSwap(l); }
 #define stricmp strcasecmp
 #define ID_INLINE inline 
 
-#ifdef __ppc__
+#if defined(__aarch64__) || defined(__arm64__)
+#define CPUSTRING	"MacOSX-arm64"
+#elif defined(__ppc__)
 #define CPUSTRING	"MacOSX-ppc"
-#elif defined __i386__
+#elif defined(__i386__)
 #define CPUSTRING	"MacOSX-i386"
 #else
 #define CPUSTRING	"MacOSX-other"
@@ -181,6 +190,7 @@ static ID_INLINE float BigFloat(const float *l) { FloatSwap(l); }
 
 #define	PATH_SEP	'/'
 
+#if defined(__ppc__)
 #define __rlwimi(out, in, shift, maskBegin, maskEnd) asm("rlwimi %0,%1,%2,%3,%4" : "=r" (out) : "r" (in), "i" (shift), "i" (maskBegin), "i" (maskEnd))
 #define __dcbt(addr, offset) asm("dcbt %0,%1" : : "b" (addr), "r" (offset))
 
@@ -205,13 +215,24 @@ static inline float __fctiw(register float f) {
 
     return fi;
 }
+#endif
 
+#if defined(__ppc__)
 #define BigShort
 static inline short LittleShort(short l) { return ShortSwap(l); }
 #define BigLong
 static inline int LittleLong (int l) { return LongSwap(l); }
 #define BigFloat
 static inline float LittleFloat (const float l) { return FloatSwap(&l); }
+#else
+/* i386 and arm64 Mac are little-endian (zip/network data is LE) */
+static inline short BigShort(short l) { return ShortSwap(l); }
+#define LittleShort
+static inline int BigLong(int l) { return LongSwap(l); }
+#define LittleLong
+static inline float BigFloat(const float *l) { return FloatSwap(l); }
+#define LittleFloat
+#endif
 
 #endif
 

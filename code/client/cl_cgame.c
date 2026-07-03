@@ -412,9 +412,15 @@ CL_CgameSystemCalls
 The cgame module is making a system call
 ====================
 */
+#if defined(MACOS_X) && defined(__LP64__)
+#define	VMA(x) ((void *)args[x])
+#define	VMF(x)	(*(float *)&args[x])
+intptr_t CL_CgameSystemCalls( intptr_t *args ) {
+#else
 #define	VMA(x) VM_ArgPtr(args[x])
 #define	VMF(x)	((float *)args)[x]
 int CL_CgameSystemCalls( int *args ) {
+#endif
 	switch( args[0] ) {
 	case CG_PRINT:
 		Com_Printf( "%s", VMA(1) );

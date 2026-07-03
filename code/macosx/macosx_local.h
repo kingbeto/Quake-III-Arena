@@ -35,6 +35,7 @@ extern "C" {
 @class NSEvent, NSOpenGLContext, NSWindow;
 #endif
 
+#include <stdint.h>
 #include <ApplicationServices/ApplicationServices.h>
 #include <OpenGL/CGLTypes.h>
 
@@ -55,7 +56,7 @@ extern qboolean Sys_Unhide();
 
 typedef struct {
     CGDirectDisplayID     display;
-    CGTableCount          tableSize;
+    uint32_t              tableSize;
     CGGammaValue	 *red;
     CGGammaValue	 *blue;
     CGGammaValue	 *green;
