@@ -1,6 +1,8 @@
-# Quake III Arena — GPL Source
+# Quake III Arena — macOS port
 
-Official GPL source release of **Quake III Arena** (id Software, 2005). This tree builds the game client and native modules on **macOS** (Apple Silicon and Intel) and **GNU/Linux**.
+This repository is **not** the unmodified [Quake III Arena GPL source](https://github.com/id-Software/Quake-III-Arena) released by id Software in 2005. It is a **community port to modern macOS** (Apple Silicon and Intel) that has **diverged** from that upstream tree: build system, platform code, VM/ABI changes, defaults, and documentation differ from the original project.
+
+The codebase still builds on **GNU/Linux** using the legacy `code/unix/` Makefile, but active development here targets **macOS**.
 
 Game assets (`baseq3/*.pk3`) are **not** included. You need a legal copy of Quake III Arena.
 
