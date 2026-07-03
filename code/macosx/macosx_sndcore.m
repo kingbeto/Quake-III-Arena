@@ -61,7 +61,7 @@ OSStatus audioDeviceIOProc(AudioDeviceID inDevice,
     short        *samples;
     unsigned int  sampleIndex;
     float        *outBuffer;
-    float         scale, temp;
+    float         scale;
 
     offset = ( s_chunkCount * submissionChunk ) % maxMixedSamples;
     samples = s_mixedSamples + offset;
@@ -77,37 +77,9 @@ OSStatus audioDeviceIOProc(AudioDeviceID inDevice,
         memset(outBuffer, 0, sizeof(*outBuffer) * dma.submission_chunk);
     } else {
         scale = (1.0f / SHRT_MAX);
-        if (outputStreamBasicDescription.mSampleRate == 44100  && dma.speed == 22050) {
-            for (sampleIndex = 0; sampleIndex < dma.submission_chunk; sampleIndex+=2) {
-                // Convert the samples from shorts to floats.  Scale the floats to be [-1..1].
-                temp = samples[sampleIndex + 0] * scale;
-                outBuffer[(sampleIndex<<1)+0] = temp;
-                outBuffer[(sampleIndex<<1)+2] = temp;
-
-                temp = samples[sampleIndex + 1] * scale;
-                outBuffer[(sampleIndex<<1)+1] = temp;
-                outBuffer[(sampleIndex<<1)+3] = temp;
-            }
-        } else if (outputStreamBasicDescription.mSampleRate == 44100  && dma.speed == 11025) {
-            for (sampleIndex = 0; sampleIndex < dma.submission_chunk; sampleIndex+=4) {
-                // Convert the samples from shorts to floats.  Scale the floats to be [-1..1].
-                temp = samples[sampleIndex + 0] * scale;
-                outBuffer[(sampleIndex<<1)+0] = temp;
-                outBuffer[(sampleIndex<<1)+2] = temp;
-                outBuffer[(sampleIndex<<1)+4] = temp;
-                outBuffer[(sampleIndex<<1)+6] = temp;
-
-                temp = samples[sampleIndex + 1] * scale;
-                outBuffer[(sampleIndex<<1)+1] = temp;
-                outBuffer[(sampleIndex<<1)+3] = temp;
-                outBuffer[(sampleIndex<<1)+5] = temp;
-                outBuffer[(sampleIndex<<1)+7] = temp;
-            }
-        } else {
-            for (sampleIndex = 0; sampleIndex < dma.submission_chunk; sampleIndex++) {
-                // Convert the samples from shorts to floats.  Scale the floats to be [-1..1].
-                outBuffer[sampleIndex] = samples[sampleIndex] * scale;
-            }
+        for (sampleIndex = 0; sampleIndex < dma.submission_chunk; sampleIndex++) {
+            // Convert the samples from shorts to floats.  Scale the floats to be [-1..1].
+            outBuffer[sampleIndex] = samples[sampleIndex] * scale;
         }
     }
     
@@ -226,9 +198,6 @@ qboolean SNDDMA_Init(void)
     }
 
     submissionChunk = chunkSize->integer;
-    if (outputStreamBasicDescription.mSampleRate == 44100) {
-        submissionChunk = chunkSize->integer/2;
-    }
     maxMixedSamples = bufferSize->integer;
     s_mixedSamples = calloc(1, sizeof(*s_mixedSamples) * maxMixedSamples);
     Com_Printf("Chunk Count = %d\n", (maxMixedSamples / submissionChunk));
@@ -239,7 +208,8 @@ qboolean SNDDMA_Init(void)
     dma.samplebits = 16;
     dma.buffer = (byte *)s_mixedSamples;
     dma.channels = outputStreamBasicDescription.mChannelsPerFrame;
-    dma.speed = 22050;	//(unsigned long)outputStreamBasicDescription.mSampleRate;
+    dma.speed = (unsigned long)outputStreamBasicDescription.mSampleRate;
+    Com_Printf("Mix speed = %d\n", dma.speed);
 
     // We haven't enqueued anything yet
     s_chunkCount = 0;
