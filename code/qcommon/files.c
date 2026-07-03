@@ -33,6 +33,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "qcommon.h"
 #include "unzip.h"
 
+#include <sys/stat.h>
+
 /*
 =============================================================================
 
@@ -1186,6 +1188,17 @@ int FS_FOpenFileRead( const char *filename, fileHandle_t *file, qboolean uniqueF
 				continue;
 			}
 
+			// ignore zero-length loose files so they don't shadow pk3 content
+			{
+				struct stat st;
+
+				if ( stat( netpath, &st ) == 0 && st.st_size <= 0 ) {
+					fclose( fsh[*file].handleFiles.file.o );
+					fsh[*file].handleFiles.file.o = NULL;
+					continue;
+				}
+			}
+
 			if ( Q_stricmp( filename + l - 4, ".cfg" )		// for config files
 				&& Q_stricmp( filename + l - 5, ".menu" )	// menu files
 				&& Q_stricmp( filename + l - 5, ".game" )	// menu files
@@ -1940,8 +1953,15 @@ char **FS_ListFilteredFiles( const char *path, const char *extension, char *filt
 				netpath = FS_BuildOSPath( search->dir->path, search->dir->gamedir, path );
 				sysFiles = Sys_ListFiles( netpath, extension, filter, &numSysFiles, qfalse );
 				for ( i = 0 ; i < numSysFiles ; i++ ) {
+					char fullpath[MAX_OSPATH];
+					struct stat st;
+
 					// unique the match
 					name = sysFiles[i];
+					Com_sprintf( fullpath, sizeof( fullpath ), "%s/%s", netpath, name );
+					if ( stat( fullpath, &st ) == 0 && st.st_size <= 0 ) {
+						continue;
+					}
 					nfiles = FS_AddFileToList( name, list, nfiles );
 				}
 				Sys_FreeFileList( sysFiles );
