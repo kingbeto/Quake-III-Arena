@@ -678,6 +678,7 @@ Ket_SetCatcher
 */
 void Key_SetCatcher( int catcher ) {
 	cls.keyCatchers = catcher;
+	IN_UIMouseMode( !!( catcher & KEYCATCH_UI ) );
 }
 
 

@@ -507,6 +507,8 @@ void CL_InitUI( void );
 void CL_ShutdownUI( void );
 int Key_GetCatcher( void );
 void Key_SetCatcher( int catcher );
+void CL_UIMouseAbsMove( int x, int y );
+void IN_UIMouseMode( qboolean uiMode );
 void LAN_LoadCachedServers();
 void LAN_SaveServersToCache();
 

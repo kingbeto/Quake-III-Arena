@@ -56,6 +56,112 @@ static qboolean mouseactive = qfalse;
 static BOOL inputRectValid = NO;
 static CGRect inputRect;
 
+static qboolean Sys_InputIsUIMode(void)
+{
+    return !!(cls.keyCatchers & KEYCATCH_UI);
+}
+
+static void Sys_UpdateUICursorFromPoint(NSPoint loc, NSRect bounds)
+{
+    float pixelX, pixelY;
+    float scale, bias;
+    int uiX, uiY;
+
+    if (!Sys_InputIsUIMode())
+        return;
+
+    if (bounds.size.width < 1.0 || bounds.size.height < 1.0)
+        return;
+
+    if (cls.glconfig.vidWidth < 1 || cls.glconfig.vidHeight < 1)
+        return;
+
+    pixelX = loc.x * ((float)cls.glconfig.vidWidth / bounds.size.width);
+    pixelY = (bounds.size.height - loc.y) * ((float)cls.glconfig.vidHeight / bounds.size.height);
+
+    scale = cls.glconfig.vidHeight * (1.0f / 480.0f);
+    if (cls.glconfig.vidWidth * 480 > cls.glconfig.vidHeight * 640) {
+        bias = 0.5f * (cls.glconfig.vidWidth - (cls.glconfig.vidHeight * (640.0f / 480.0f)));
+    } else {
+        bias = 0.0f;
+    }
+
+    uiX = (int)((pixelX - bias) / scale);
+    uiY = (int)(pixelY / scale);
+
+    if (uiX < 0)
+        uiX = 0;
+    else if (uiX > 640)
+        uiX = 640;
+
+    if (uiY < 0)
+        uiY = 0;
+    else if (uiY > 480)
+        uiY = 480;
+
+    CL_UIMouseAbsMove(uiX, uiY);
+}
+
+static void Sys_UpdateUICursorFromEvent(NSEvent *event)
+{
+    NSWindow *window;
+    NSView *view;
+    NSPoint loc;
+    NSRect bounds;
+
+    if (!Sys_InputIsUIMode())
+        return;
+
+    window = [event window];
+    if (!window)
+        window = glw_state.window;
+    if (!window)
+        return;
+
+    view = [window contentView];
+    loc = [view convertPoint:[event locationInWindow] fromView:nil];
+    bounds = [view bounds];
+    Sys_UpdateUICursorFromPoint(loc, bounds);
+}
+
+static void Sys_SyncUICursorPosition(void)
+{
+    NSWindow *window;
+    NSView *view;
+    NSPoint screenPt, windowPt, loc;
+    NSRect bounds;
+
+    if (!Sys_InputIsUIMode() || !glw_state.window)
+        return;
+
+    window = glw_state.window;
+    view = [window contentView];
+    bounds = [view bounds];
+    screenPt = [NSEvent mouseLocation];
+    windowPt = [window convertPointFromScreen:screenPt];
+    loc = [view convertPoint:windowPt fromView:nil];
+    Sys_UpdateUICursorFromPoint(loc, bounds);
+}
+
+void IN_UIMouseMode(qboolean uiMode)
+{
+    static qboolean inUIMode = qfalse;
+
+    if (uiMode == inUIMode)
+        return;
+    inUIMode = uiMode;
+
+    if (uiMode) {
+        if (mouseactive)
+            Sys_StopMouseInput();
+        Sys_FocusGameWindow();
+        [NSCursor unhide];
+        Sys_SyncUICursorPosition();
+    } else if (!in_nomouse->integer && inputActive) {
+        Sys_StartMouseInput();
+    }
+}
+
 static unsigned int currentModifierFlags;
 
 
@@ -681,18 +787,30 @@ static inline void processEvent(NSEvent *event, int currentTime)
     
     switch (eventType) {
         case NSLeftMouseDown:
+            if (Sys_InputIsUIMode()) {
+                Sys_FocusGameWindow();
+                Sys_UpdateUICursorFromEvent(event);
+            }
             Sys_QueEvent(currentTime, SE_KEY, K_MOUSE1, qtrue, 0, NULL);
             return;
         case NSLeftMouseUp:
             Sys_QueEvent(currentTime, SE_KEY, K_MOUSE1, qfalse, 0, NULL);
             return;
         case NSRightMouseDown:
+            if (Sys_InputIsUIMode()) {
+                Sys_FocusGameWindow();
+                Sys_UpdateUICursorFromEvent(event);
+            }
             Sys_QueEvent(currentTime, SE_KEY, K_MOUSE2, qtrue, 0, NULL);
             return;
         case NSRightMouseUp:
             Sys_QueEvent(currentTime, SE_KEY, K_MOUSE2, qfalse, 0, NULL);
             return;
         case 25: // other mouse down
+            if (Sys_InputIsUIMode()) {
+                Sys_FocusGameWindow();
+                Sys_UpdateUICursorFromEvent(event);
+            }
             Sys_QueEvent(currentTime, SE_KEY, K_MOUSE3, qtrue, 0, NULL);
             return;
         case 26: // other mouse up
@@ -703,6 +821,10 @@ static inline void processEvent(NSEvent *event, int currentTime)
         case NSLeftMouseDragged:
         case NSRightMouseDragged:
         case 27: // other mouse dragged
+            if (Sys_InputIsUIMode()) {
+                Sys_UpdateUICursorFromEvent(event);
+                return;
+            }
             Sys_ProcessMouseMovedEvent(event, currentTime);
             return;
         case NSKeyDown:
@@ -879,11 +1001,12 @@ sysEvent_t Sys_GetEvent( void )
     // During debugging it is sometimes usefull to be able to start/stop mouse input.
     // Don't turn on the input when we've disabled it because we're hidden, however.
     if (!com_dedicated->integer) {
-        if (in_nomouse->integer == mouseactive && !Sys_IsHidden) {
-            if (in_nomouse->integer)
-                Sys_StopMouseInput();
-            else
+        qboolean wantMouse = !in_nomouse->integer && !Sys_IsHidden && !Sys_InputIsUIMode();
+        if (wantMouse != mouseactive) {
+            if (wantMouse)
                 Sys_StartMouseInput();
+            else
+                Sys_StopMouseInput();
         }
     }
     

@@ -850,6 +850,8 @@ void UI_SetActiveMenu( uiMenuCommand_t menu ) {
 UI_KeyEvent
 =================
 */
+static void UI_MouseUpdateFocus( void );
+
 void UI_KeyEvent( int key, int down ) {
 	sfxHandle_t		s;
 
@@ -861,6 +863,10 @@ void UI_KeyEvent( int key, int down ) {
 		return;
 	}
 
+	if (key == K_MOUSE1 || key == K_MOUSE2 || key == K_MOUSE3) {
+		UI_MouseUpdateFocus();
+	}
+
 	if (uis.activemenu->key)
 		s = uis.activemenu->key( key );
 	else
@@ -870,31 +876,13 @@ void UI_KeyEvent( int key, int down ) {
 		trap_S_StartLocalSound( s, CHAN_LOCAL_SOUND );
 }
 
-/*
-=================
-UI_MouseEvent
-=================
-*/
-void UI_MouseEvent( int dx, int dy )
+static void UI_MouseUpdateFocus( void )
 {
 	int				i;
 	menucommon_s*	m;
 
 	if (!uis.activemenu)
 		return;
-
-	// update mouse screen position
-	uis.cursorx += dx;
-	if (uis.cursorx < 0)
-		uis.cursorx = 0;
-	else if (uis.cursorx > SCREEN_WIDTH)
-		uis.cursorx = SCREEN_WIDTH;
-
-	uis.cursory += dy;
-	if (uis.cursory < 0)
-		uis.cursory = 0;
-	else if (uis.cursory > SCREEN_HEIGHT)
-		uis.cursory = SCREEN_HEIGHT;
 
 	// region test the active menu items
 	for (i=0; i<uis.activemenu->nitems; i++)
@@ -917,7 +905,9 @@ void UI_MouseEvent( int dx, int dy )
 		if (uis.activemenu->cursor != i)
 		{
 			Menu_SetCursor( uis.activemenu, i );
-			((menucommon_s*)(uis.activemenu->items[uis.activemenu->cursor_prev]))->flags &= ~QMF_HASMOUSEFOCUS;
+			if ( uis.activemenu->cursor_prev >= 0 && uis.activemenu->cursor_prev < uis.activemenu->nitems ) {
+				((menucommon_s*)(uis.activemenu->items[uis.activemenu->cursor_prev]))->flags &= ~QMF_HASMOUSEFOCUS;
+			}
 
 			if ( !(((menucommon_s*)(uis.activemenu->items[uis.activemenu->cursor]))->flags & QMF_SILENT ) ) {
 				trap_S_StartLocalSound( menu_move_sound, CHAN_LOCAL_SOUND );
@@ -932,6 +922,57 @@ void UI_MouseEvent( int dx, int dy )
 		// out of any region
 		((menucommon_s*)(uis.activemenu->items[uis.activemenu->cursor]))->flags &= ~QMF_HASMOUSEFOCUS;
 	}
+}
+
+/*
+=================
+UI_MouseEvent
+=================
+*/
+void UI_MouseEvent( int dx, int dy )
+{
+	if (!uis.activemenu)
+		return;
+
+	uis.cursorx += dx;
+	if (uis.cursorx < 0)
+		uis.cursorx = 0;
+	else if (uis.cursorx > SCREEN_WIDTH)
+		uis.cursorx = SCREEN_WIDTH;
+
+	uis.cursory += dy;
+	if (uis.cursory < 0)
+		uis.cursory = 0;
+	else if (uis.cursory > SCREEN_HEIGHT)
+		uis.cursory = SCREEN_HEIGHT;
+
+	UI_MouseUpdateFocus();
+}
+
+/*
+=================
+UI_MouseAbs
+=================
+*/
+void UI_MouseAbs( int x, int y )
+{
+	if (!uis.activemenu)
+		return;
+
+	if (x < 0)
+		x = 0;
+	else if (x > SCREEN_WIDTH)
+		x = SCREEN_WIDTH;
+
+	if (y < 0)
+		y = 0;
+	else if (y > SCREEN_HEIGHT)
+		y = SCREEN_HEIGHT;
+
+	uis.cursorx = x;
+	uis.cursory = y;
+
+	UI_MouseUpdateFocus();
 }
 
 char *UI_Argv( int arg ) {
@@ -1197,6 +1238,14 @@ void UI_Refresh( int realtime )
 
 	if ( !( trap_Key_GetCatcher() & KEYCATCH_UI ) ) {
 		return;
+	}
+
+	trap_GetGlconfig( &uis.glconfig );
+	uis.scale = uis.glconfig.vidHeight * (1.0/480.0);
+	if ( uis.glconfig.vidWidth * 480 > uis.glconfig.vidHeight * 640 ) {
+		uis.bias = 0.5 * ( uis.glconfig.vidWidth - ( uis.glconfig.vidHeight * (640.0/480.0) ) );
+	} else {
+		uis.bias = 0;
 	}
 
 	UI_UpdateCvars();

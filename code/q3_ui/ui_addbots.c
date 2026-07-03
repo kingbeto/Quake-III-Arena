@@ -87,18 +87,27 @@ UI_AddBotsMenu_FightEvent
 static void UI_AddBotsMenu_FightEvent( void* ptr, int event ) {
 	const char	*team;
 	int			skill;
+	int			gametype;
+	char		info[MAX_INFO_STRING];
 
 	if (event != QM_ACTIVATED) {
 		return;
 	}
 
+	trap_GetConfigString( CS_SERVERINFO, info, sizeof( info ) );
+	gametype = atoi( Info_ValueForKey( info, "g_gametype" ) );
+
 	team = addBotsMenuInfo.team.itemnames[addBotsMenuInfo.team.curvalue];
 	skill = addBotsMenuInfo.skill.curvalue + 1;
 
-	trap_Cmd_ExecuteText( EXEC_APPEND, va("addbot %s %i %s %i\n",
-		addBotsMenuInfo.botnames[addBotsMenuInfo.selectedBotNum], skill, team, addBotsMenuInfo.delay) );
-
-	addBotsMenuInfo.delay += 1500;
+	if ( gametype >= GT_TEAM ) {
+		trap_Cmd_ExecuteText( EXEC_APPEND, va( "addbot %s %i %s\n",
+			addBotsMenuInfo.botnames[addBotsMenuInfo.selectedBotNum], skill, team ) );
+	} else {
+		/* FFA / tournament: omit team and delay (empty %s shifts argv) */
+		trap_Cmd_ExecuteText( EXEC_APPEND, va( "addbot %s %i\n",
+			addBotsMenuInfo.botnames[addBotsMenuInfo.selectedBotNum], skill ) );
+	}
 }
 
 

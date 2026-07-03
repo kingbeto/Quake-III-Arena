@@ -1,6 +1,7 @@
 /* GLOBAL.H - RSAREF types and constants */
 
 #include <string.h>
+#include <stdint.h>
 #if defined(_WIN32)
 #pragma warning(disable : 4711)		// selected for automatic inline expansion
 #endif
@@ -12,7 +13,7 @@ typedef unsigned char *POINTER;
 typedef unsigned short int UINT2;
 
 /* UINT4 defines a four byte word */
-typedef unsigned long int UINT4;
+typedef uint32_t UINT4;
 
   
 /* MD4.H - header file for MD4C.C */
@@ -21,9 +22,9 @@ typedef unsigned long int UINT4;
 
 All rights reserved.
   
-License to copy and use this software is granted provided that it is identified as the ìRSA Data Security, Inc. MD4 Message-Digest Algorithmî in all material mentioning or referencing this software or this function.
-License is also granted to make and use derivative works provided that such works are identified as ìderived from the RSA Data Security, Inc. MD4 Message-Digest Algorithmî in all material mentioning or referencing the derived work.
-RSA Data Security, Inc. makes no representations concerning either the merchantability of this software or the suitability of this software for any particular purpose. It is provided ìas isî without express or implied warranty of any kind.
+License to copy and use this software is granted provided that it is identified as the ùRSA Data Security, Inc. MD4 Message-Digest Algorithmù in all material mentioning or referencing this software or this function.
+License is also granted to make and use derivative works provided that such works are identified as ùderived from the RSA Data Security, Inc. MD4 Message-Digest Algorithmù in all material mentioning or referencing the derived work.
+RSA Data Security, Inc. makes no representations concerning either the merchantability of this software or the suitability of this software for any particular purpose. It is provided ùas isù without express or implied warranty of any kind.
   
 These notices must be retained in any copies of any part of this documentation and/or software. */
 

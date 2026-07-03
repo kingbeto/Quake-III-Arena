@@ -61,6 +61,10 @@ VMMAIN_RETURN_TYPE vmMain( int command, int arg0, int arg1, int arg2, int arg3, 
 		UI_MouseEvent( arg0, arg1 );
 		return 0;
 
+	case UI_MOUSE_ABS:
+		UI_MouseAbs( arg0, arg1 );
+		return 0;
+
 	case UI_REFRESH:
 		UI_Refresh( arg0 );
 		return 0;

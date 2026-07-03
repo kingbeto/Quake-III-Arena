@@ -60,27 +60,26 @@ OSStatus audioDeviceIOProc(AudioDeviceID inDevice,
     int           offset;
     short        *samples;
     unsigned int  sampleIndex;
+    unsigned int  outSamples;
     float        *outBuffer;
     float         scale;
 
-    offset = ( s_chunkCount * submissionChunk ) % maxMixedSamples;
+    offset = ( s_chunkCount * dma.submission_chunk ) & (maxMixedSamples - 1);
     samples = s_mixedSamples + offset;
 
     assert(outOutputData->mNumberBuffers == 1);
     assert(outOutputData->mBuffers[0].mNumberChannels == 2);
-    //assert(outOutputData->mBuffers[0].mDataByteSize == (dma.submission_chunk * sizeof(float)));
 
     outBuffer = (float *)outOutputData->mBuffers[0].mData;
-    
-    // If we have run out of samples, return silence
-    if (s_chunkCount * submissionChunk > dma.channels * s_paintedtime) {
-        memset(outBuffer, 0, sizeof(*outBuffer) * dma.submission_chunk);
-    } else {
-        scale = (1.0f / SHRT_MAX);
-        for (sampleIndex = 0; sampleIndex < dma.submission_chunk; sampleIndex++) {
-            // Convert the samples from shorts to floats.  Scale the floats to be [-1..1].
-            outBuffer[sampleIndex] = samples[sampleIndex] * scale;
-        }
+    outSamples = outOutputData->mBuffers[0].mDataByteSize / sizeof(float);
+
+    scale = (1.0f / SHRT_MAX);
+    for (sampleIndex = 0; sampleIndex < dma.submission_chunk && sampleIndex < outSamples; sampleIndex++) {
+        outBuffer[sampleIndex] = samples[sampleIndex] * scale;
+    }
+    if (outSamples > dma.submission_chunk) {
+        memset(outBuffer + dma.submission_chunk, 0,
+            (outSamples - dma.submission_chunk) * sizeof(float));
     }
     
     s_chunkCount++; // this is the next buffer we will submit
@@ -164,6 +163,14 @@ qboolean SNDDMA_Init(void)
         return qfalse;
     }
 
+    submissionChunk = chunkSize->integer;
+    if (submissionChunk > bufferByteCount / sizeof(float)) {
+        submissionChunk = bufferByteCount / sizeof(float);
+    }
+    if (!submissionChunk) {
+        submissionChunk = chunkSize->integer;
+    }
+
     // Print out the device status
     propertySize = sizeof(outputStreamBasicDescription);
     status = AudioDeviceGetProperty(outputDeviceID, 0, NO, kAudioDevicePropertyStreamFormat, &propertySize, &outputStreamBasicDescription);
@@ -189,6 +196,8 @@ qboolean SNDDMA_Init(void)
             Com_Printf("Default Audio Device doesn't support Linear PCM!");
             return qfalse;
     }
+
+    Com_Printf("Hardware buffer = %d bytes (%d samples)\n", bufferByteCount, submissionChunk);
     
     // Start sound running
     status = AudioDeviceAddIOProc(outputDeviceID, audioDeviceIOProc, NULL);
@@ -197,7 +206,6 @@ qboolean SNDDMA_Init(void)
         return qfalse;
     }
 
-    submissionChunk = chunkSize->integer;
     maxMixedSamples = bufferSize->integer;
     s_mixedSamples = calloc(1, sizeof(*s_mixedSamples) * maxMixedSamples);
     Com_Printf("Chunk Count = %d\n", (maxMixedSamples / submissionChunk));

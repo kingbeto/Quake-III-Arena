@@ -1585,6 +1585,7 @@ sfxHandle_t Menu_DefaultKey( menuframework_s *m, int key )
 	sfxHandle_t		sound = 0;
 	menucommon_s	*item;
 	int				cursor_prev;
+	int				i;
 
 	// menu system keys
 	switch ( key )
@@ -1670,9 +1671,19 @@ sfxHandle_t Menu_DefaultKey( menuframework_s *m, int key )
 
 		case K_MOUSE1:
 		case K_MOUSE3:
-			if (item)
-				if ((item->flags & QMF_HASMOUSEFOCUS) && !(item->flags & (QMF_GRAYED|QMF_INACTIVE)))
-					return (Menu_ActivateItem( m, item ));
+			for (i = 0; i < m->nitems; i++) {
+				item = (menucommon_s*)m->items[i];
+				if (item->flags & (QMF_GRAYED|QMF_INACTIVE))
+					continue;
+				if (uis.cursorx < item->left || uis.cursorx > item->right ||
+					uis.cursory < item->top || uis.cursory > item->bottom) {
+					continue;
+				}
+				if (m->cursor != i) {
+					Menu_SetCursor( m, i );
+				}
+				return (Menu_ActivateItem( m, item ));
+			}
 			break;
 
 		case K_JOY1:
