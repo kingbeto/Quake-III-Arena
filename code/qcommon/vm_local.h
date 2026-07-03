@@ -164,7 +164,11 @@ struct vm_s {
 	int			breakCount;
 
 // fqpath member added 7/20/02 by T.Ray
+#if defined(MACOS_X)
+	char		fqpath[MAX_OSPATH];
+#else
 	char		fqpath[MAX_QPATH+1] ;
+#endif
 };
 
 

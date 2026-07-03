@@ -89,6 +89,9 @@ static void SV_EmitPacketEntities( clientSnapshot_t *from, clientSnapshot_t *to,
 			// because the force parm is qfalse, this will not result
 			// in any bytes being emited if the entity has not changed at all
 			MSG_WriteDeltaEntity (msg, oldent, newent, qfalse );
+			if ( msg->overflowed ) {
+				return;
+			}
 			oldindex++;
 			newindex++;
 			continue;
@@ -97,6 +100,9 @@ static void SV_EmitPacketEntities( clientSnapshot_t *from, clientSnapshot_t *to,
 		if ( newnum < oldnum ) {
 			// this is a new entity, send it from the baseline
 			MSG_WriteDeltaEntity (msg, &sv.svEntities[newnum].baseline, newent, qtrue );
+			if ( msg->overflowed ) {
+				return;
+			}
 			newindex++;
 			continue;
 		}
@@ -104,6 +110,9 @@ static void SV_EmitPacketEntities( clientSnapshot_t *from, clientSnapshot_t *to,
 		if ( newnum > oldnum ) {
 			// the old entity isn't present in the new message
 			MSG_WriteDeltaEntity (msg, oldent, NULL, qtrue );
+			if ( msg->overflowed ) {
+				return;
+			}
 			oldindex++;
 			continue;
 		}
@@ -610,6 +619,7 @@ Also called by SV_FinalMessage
 void SV_SendClientSnapshot( client_t *client ) {
 	byte		msg_buf[MAX_MSGLEN];
 	msg_t		msg;
+	int			savedDeltaMessage;
 
 	// build the snapshot
 	SV_BuildClientSnapshot( client );
@@ -637,10 +647,26 @@ void SV_SendClientSnapshot( client_t *client ) {
 	// Add any download data if the client is downloading
 	SV_WriteDownloadToClient( client, &msg );
 
-	// check for overflow
+	// truncated snapshots confuse the client; retry without delta compression
 	if ( msg.overflowed ) {
-		Com_Printf ("WARNING: msg overflowed for %s\n", client->name);
-		MSG_Clear (&msg);
+		Com_Printf ("WARNING: msg overflowed for %s, resending uncompressed\n", client->name);
+		savedDeltaMessage = client->deltaMessage;
+		client->deltaMessage = -1;
+
+		MSG_Init (&msg, msg_buf, sizeof(msg_buf));
+		msg.allowoverflow = qtrue;
+
+		MSG_WriteLong( &msg, client->lastClientCommand );
+		SV_UpdateServerCommandsToClient( client, &msg );
+		SV_WriteSnapshotToClient( client, &msg );
+		SV_WriteDownloadToClient( client, &msg );
+
+		client->deltaMessage = savedDeltaMessage;
+	}
+
+	if ( msg.overflowed ) {
+		Com_Printf ("WARNING: msg overflowed for %s, dropping snapshot\n", client->name);
+		return;
 	}
 
 	SV_SendMessageToClient( &msg, client );

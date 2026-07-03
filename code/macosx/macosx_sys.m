@@ -111,7 +111,11 @@ void	* QDECL Sys_LoadDll( const char *name, char *fqpath , vmMainFunc_t *entryPo
     
     path = [libraryPath UTF8String];
     if (fqpath) {
+#if defined(MACOS_X)
         Q_strncpyz(fqpath, path, MAX_OSPATH);
+#else
+        Q_strncpyz(fqpath, path, MAX_QPATH + 1);
+#endif
     }
     Com_Printf("Loading '%s'.\n", path);
     libHandle = dlopen( path, RTLD_LAZY );

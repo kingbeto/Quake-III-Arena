@@ -36,6 +36,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #import <sys/time.h>
 #import <unistd.h>
 
+#ifndef NSEventMaskAny
+#define NSEventMaskAny NSAnyEventMask
+#endif
 
 static qboolean inputActive;
 
@@ -135,12 +138,25 @@ void Sys_InitInput(void)
 
     inputActive = qtrue;
 
-    if ( in_nomouse->integer == 0 )
-        Sys_StartMouseInput();
-    else
+    if ( in_nomouse->integer ) {
         Com_Printf( "  in_nomouse is set, skipping.\n" );
+    } else if ( inputRectValid ) {
+        Sys_StartMouseInput();
+    } else {
+        Com_Printf( "  deferring mouse input until game window is ready.\n" );
+    }
 
     Com_Printf( "------------------------------------\n" );
+}
+
+void Sys_InputWindowReady( void )
+{
+    if ( !inputActive || in_nomouse->integer || mouseactive ) {
+        return;
+    }
+
+    Sys_StartMouseInput();
+    Sys_FocusGameWindow();
 }
 
 void Sys_ShutdownInput(void)
@@ -190,10 +206,10 @@ static void Sys_StartMouseInput()
 
     mouseactive = qtrue;
     if (inputRectValid && !glConfig.isFullscreen)
-        // Make sure that if window moved we don't hose the user...
         Sys_UpdateWindowMouseInputRect();
 
-    Sys_LockMouseInInputRect(inputRect);
+    if (inputRectValid)
+        Sys_LockMouseInInputRect(inputRect);
 
     // Grab any mouse delta information to reset the last delta buffer
     CGGetLastMouseDelta(&dx, &dy);
@@ -202,6 +218,7 @@ static void Sys_StartMouseInput()
     (void)in_disableOSMouseScaling;
     
     [NSCursor hide];
+    Sys_FocusGameWindow();
 }
 
 static void Sys_StopMouseInput()
@@ -663,22 +680,23 @@ static inline void processEvent(NSEvent *event, int currentTime)
         NSLog(@"event = %@", event);
     
     switch (eventType) {
-        // These six event types are ignored since we do all of our mouse down/up process via the uber-mouse system defined event.  We have to accept these events however since they get enqueued and the queue will fill up if we don't.
         case NSLeftMouseDown:
-            //Sys_QueEvent(currentTime, SE_KEY, K_MOUSE1, qtrue, 0, NULL);
+            Sys_QueEvent(currentTime, SE_KEY, K_MOUSE1, qtrue, 0, NULL);
             return;
         case NSLeftMouseUp:
-            //Sys_QueEvent(currentTime, SE_KEY, K_MOUSE1, qfalse, 0, NULL);
+            Sys_QueEvent(currentTime, SE_KEY, K_MOUSE1, qfalse, 0, NULL);
             return;
         case NSRightMouseDown:
-            //Sys_QueEvent(currentTime, SE_KEY, K_MOUSE2, qtrue, 0, NULL);
+            Sys_QueEvent(currentTime, SE_KEY, K_MOUSE2, qtrue, 0, NULL);
             return;
         case NSRightMouseUp:
-            //Sys_QueEvent(currentTime, SE_KEY, K_MOUSE2, qfalse, 0, NULL);
+            Sys_QueEvent(currentTime, SE_KEY, K_MOUSE2, qfalse, 0, NULL);
             return;
         case 25: // other mouse down
+            Sys_QueEvent(currentTime, SE_KEY, K_MOUSE3, qtrue, 0, NULL);
             return;
         case 26: // other mouse up
+            Sys_QueEvent(currentTime, SE_KEY, K_MOUSE3, qfalse, 0, NULL);
             return;
             
         case NSMouseMoved:
@@ -724,7 +742,7 @@ static void Sys_SendKeyEvents(int currentTime)
         timeout = [NSDate dateWithTimeIntervalSinceNow: 0.25 * SNDDMA_GetBufferDuration()];
     
     // This gets call regardless of whether inputActive is true or not.  This is important since we need to be poking the event queue in order for the unhide event to make its way through the system.  This means that when we hide, we can just shut down the input system and reeanbled it when we unhide.
-    while ((event = [NSApp nextEventMatchingMask: NSAnyEventMask
+    while ((event = [NSApp nextEventMatchingMask: NSEventMaskAny
                                        untilDate: timeout
                                           inMode: NSDefaultRunLoopMode
                                          dequeue:YES])) {

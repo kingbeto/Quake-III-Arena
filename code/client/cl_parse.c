@@ -85,7 +85,7 @@ CL_ParsePacketEntities
 
 ==================
 */
-void CL_ParsePacketEntities( msg_t *msg, clSnapshot_t *oldframe, clSnapshot_t *newframe) {
+qboolean CL_ParsePacketEntities( msg_t *msg, clSnapshot_t *oldframe, clSnapshot_t *newframe) {
 	int			newnum;
 	entityState_t	*oldstate;
 	int			oldindex, oldnum;
@@ -117,7 +117,9 @@ void CL_ParsePacketEntities( msg_t *msg, clSnapshot_t *oldframe, clSnapshot_t *n
 		}
 
 		if ( msg->readcount > msg->cursize ) {
-			Com_Error (ERR_DROP,"CL_ParsePacketEntities: end of message");
+			Com_Printf ("CL_ParsePacketEntities: end of message\n");
+			cl.parseEntitiesNum = newframe->parseEntitiesNum;
+			return qfalse;
 		}
 
 		while ( oldnum < newnum ) {
@@ -185,6 +187,8 @@ void CL_ParsePacketEntities( msg_t *msg, clSnapshot_t *oldframe, clSnapshot_t *n
 			oldnum = oldstate->number;
 		}
 	}
+
+	return qtrue;
 }
 
 
@@ -267,7 +271,9 @@ void CL_ParseSnapshot( msg_t *msg ) {
 
 	// read packet entities
 	SHOWNET( msg, "packet entities" );
-	CL_ParsePacketEntities( msg, old, &newSnap );
+	if ( !CL_ParsePacketEntities( msg, old, &newSnap ) ) {
+		newSnap.valid = qfalse;
+	}
 
 	// if not valid, dump the entire thing now that it has
 	// been properly read

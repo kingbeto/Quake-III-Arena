@@ -21,7 +21,7 @@ ARCH_FLAGS = -arch $(ARCH)
 CFLAGS = $(ARCH_FLAGS) -O2 -Wall -Wno-unknown-pragmas -Wno-four-char-constants \
 	-Wno-deprecated-declarations -Wno-unused-value -Wno-logical-op-parentheses \
 	-Wno-pointer-sign -Wno-implicit-int -Wno-deprecated-non-prototype \
-	-DMACOS_X -DBOTLIB -DMISSIONPACK -DSMP
+	-DMACOS_X -DBOTLIB -DSMP
 
 OBJCFLAGS = $(CFLAGS)
 CXXFLAGS = $(CFLAGS)
@@ -102,7 +102,7 @@ CGAME_CFLAGS = $(CFLAGS) -DCGAME
 UI_CFLAGS = $(CFLAGS) -DUI
 
 GAME_SRCS = $(filter-out %/g_rankings.c,$(wildcard $(CODE_DIR)/game/*.c))
-CGAME_SRCS = $(filter-out %/cg_particles.c,$(wildcard $(CODE_DIR)/cgame/*.c))
+CGAME_SRCS = $(filter-out %/cg_particles.c %/cg_newdraw.c,$(wildcard $(CODE_DIR)/cgame/*.c))
 UI_Q3UI_SRCS = $(filter-out %/ui_rankings.c %/ui_rankstatus.c %/ui_signup.c %/ui_login.c %/ui_specifyleague.c,$(wildcard $(CODE_DIR)/q3_ui/*.c))
 UI_GAME_SRCS = $(CODE_DIR)/game/bg_misc.c $(CODE_DIR)/game/bg_lib.c $(CODE_DIR)/game/q_math.c
 

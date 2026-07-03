@@ -518,7 +518,21 @@ nextInstruction2:
 				*(int *)&image[ programStack + 4 ] = -1 - programCounter;
 
 //VM_LogSyscalls( (int *)&image[ programStack + 4 ] );
+#if defined(MACOS_X) && defined(__LP64__)
+				{
+					intptr_t	largs[16];
+					int			*iargs;
+					int			si;
+
+					iargs = (int *)&image[ programStack + 4 ];
+					for ( si = 0; si < 16; si++ ) {
+						largs[si] = (intptr_t)iargs[si];
+					}
+					r = vm->systemCall( largs );
+				}
+#else
 				r = vm->systemCall( (int *)&image[ programStack + 4 ] );
+#endif
 
 #ifdef DEBUG_VM
 				// this is just our stack frame pointer, only needed

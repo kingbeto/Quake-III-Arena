@@ -470,11 +470,18 @@ vm_t *VM_Create( const char *module, vmSystemCall_t systemCalls,
 
 	remaining = Hunk_MemoryRemaining();
 
-	// see if we already have the VM
+	// discard any stale or corrupt vm slots
 	for ( i = 0 ; i < MAX_VM ; i++ ) {
-		if (!Q_stricmp(vmTable[i].name, module)) {
-			vm = &vmTable[i];
-			return vm;
+		if ( !vmTable[i].name[0] ) {
+			continue;
+		}
+		if ( !Q_stricmp( vmTable[i].name, module ) ) {
+			VM_Free( &vmTable[i] );
+			continue;
+		}
+		if ( strchr( vmTable[i].name, '/' ) || strchr( vmTable[i].name, '.' ) ) {
+			Com_Printf( S_COLOR_YELLOW "WARNING: freeing corrupt VM slot %d (%s)\n", i, vmTable[i].name );
+			VM_Free( &vmTable[i] );
 		}
 	}
 
@@ -625,6 +632,10 @@ void VM_Clear(void) {
 	}
 	currentVM = NULL;
 	lastVM = NULL;
+}
+
+qboolean VM_UsingNativeDll( void ) {
+	return currentVM && currentVM->entryPoint != NULL;
 }
 
 void *VM_ArgPtr( int intValue ) {

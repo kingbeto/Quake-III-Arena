@@ -336,6 +336,7 @@ void	VM_Debug( int level );
 
 void	*VM_ArgPtr( int intValue );
 #if defined(MACOS_X) && defined(__LP64__)
+qboolean	VM_UsingNativeDll( void );
 void	*VM_ExplicitArgPtr( vm_t *vm, vmCallResult_t intValue );
 #else
 void	*VM_ExplicitArgPtr( vm_t *vm, int intValue );

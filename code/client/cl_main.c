@@ -1151,8 +1151,22 @@ void CL_SendPureChecksums( void ) {
 	const char *pChecksums;
 	char cMsg[MAX_INFO_VALUE];
 	int i;
+	fileHandle_t	f;
 
 	// if we are pure we need to send back a command with our referenced pk3 checksums
+	if ( cl_connectedToPureServer ) {
+		// native game DLLs do not read vm/*.qvm from pk3s; touch them so
+		// FS_CGAME_REF and FS_UI_REF are set for pure server validation
+		FS_FOpenFileRead( "vm/cgame.qvm", &f, qfalse );
+		if ( f ) {
+			FS_FCloseFile( f );
+		}
+		FS_FOpenFileRead( "vm/ui.qvm", &f, qfalse );
+		if ( f ) {
+			FS_FCloseFile( f );
+		}
+	}
+
 	pChecksums = FS_ReferencedPakPureChecksums();
 
 	// "cp"
@@ -1357,6 +1371,18 @@ void CL_DownloadsComplete( void ) {
 	// initialize the CGame
 	cls.cgameStarted = qtrue;
 	CL_InitCGame();
+
+#if defined(MACOS_X)
+	{
+		extern void Sys_FocusGameWindow(void);
+
+		if ( uivm ) {
+			VM_Call( uivm, UI_SET_ACTIVE_MENU, UIMENU_NONE );
+		}
+		cls.keyCatchers = 0;
+		Sys_FocusGameWindow();
+	}
+#endif
 
 	// set pure checksums
 	CL_SendPureChecksums();

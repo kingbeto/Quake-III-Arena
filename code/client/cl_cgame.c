@@ -413,7 +413,7 @@ The cgame module is making a system call
 ====================
 */
 #if defined(MACOS_X) && defined(__LP64__)
-#define	VMA(x) ((void *)args[x])
+#define	VMA(x) (VM_UsingNativeDll() ? (void *)args[x] : VM_ArgPtr( (int)args[x] ))
 #define	VMF(x)	(*(float *)&args[x])
 intptr_t CL_CgameSystemCalls( intptr_t *args ) {
 #else
@@ -421,7 +421,7 @@ intptr_t CL_CgameSystemCalls( intptr_t *args ) {
 #define	VMF(x)	((float *)args)[x]
 int CL_CgameSystemCalls( int *args ) {
 #endif
-	switch( args[0] ) {
+	switch( (int)args[0] ) {
 	case CG_PRINT:
 		Com_Printf( "%s", VMA(1) );
 		return 0;
@@ -736,8 +736,16 @@ void CL_InitCGame( void ) {
 
 	// load the dll or bytecode
 	if ( cl_connectedToPureServer != 0 ) {
-		// if sv_pure is set we only allow qvms to be loaded
-		interpret = VMI_COMPILED;
+#if defined(MACOS_X)
+		// native bundles ship with the app; use them on local/listen servers
+		if ( com_sv_running->integer || NET_IsLocalAddress( clc.serverAddress ) ) {
+			interpret = VMI_NATIVE;
+		} else
+#endif
+		{
+			// if sv_pure is set we only allow qvms to be loaded
+			interpret = VMI_COMPILED;
+		}
 	}
 	else {
 		interpret = Cvar_VariableValue( "vm_cgame" );

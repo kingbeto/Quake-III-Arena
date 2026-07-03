@@ -264,7 +264,24 @@ void Sys_UpdateWindowMouseInputRect(void)
     
     Sys_SetMouseInputRect(CGRectMake(windowRect.origin.x, windowRect.origin.y,
                                     windowRect.size.width, windowRect.size.height));
-}									
+    Sys_InputWindowReady();
+}
+
+void Sys_FocusGameWindow(void)
+{
+#ifndef DEDICATED
+    if ( glConfig.isFullscreen ) {
+        [NSApp activateIgnoringOtherApps:YES];
+        return;
+    }
+
+    if ( glw_state.window ) {
+        [NSApp activateIgnoringOtherApps:YES];
+        [glw_state.window makeKeyAndOrderFront:nil];
+        [[glw_state.window contentView] becomeFirstResponder];
+    }
+#endif
+}
 
 // This is needed since CGReleaseAllDisplays() restores the gamma on the displays and we want to fade it up rather than just flickering all the displays
 static void ReleaseAllDisplays()
@@ -397,7 +414,8 @@ static qboolean CreateGameWindow( qboolean isSecondTry )
                                                            
         [glw_state.window setTitle: @"Quake3"];
 
-        [glw_state.window orderFront: nil];
+        [glw_state.window makeKeyAndOrderFront: nil];
+        [[glw_state.window contentView] becomeFirstResponder];
 
         // Always get mouse moved events (if mouse support is turned off (rare)
         // the event system will filter them out.

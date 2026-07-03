@@ -759,7 +759,7 @@ static int FloatAsInt( float f ) {
 
 void *VM_ArgPtr( int intValue );
 #if defined(MACOS_X) && defined(__LP64__)
-#define	VMA(x) ((void *)args[x])
+#define	VMA(x) (VM_UsingNativeDll() ? (void *)args[x] : VM_ArgPtr( (int)args[x] ))
 #define	VMF(x)	(*(float *)&args[x])
 intptr_t CL_UISystemCalls( intptr_t *args ) {
 #else
@@ -767,7 +767,7 @@ intptr_t CL_UISystemCalls( intptr_t *args ) {
 #define	VMF(x)	((float *)args)[x]
 int CL_UISystemCalls( int *args ) {
 #endif
-	switch( args[0] ) {
+	switch( (int)args[0] ) {
 	case UI_ERROR:
 		Com_Error( ERR_DROP, "%s", VMA(1) );
 		return 0;
@@ -894,6 +894,9 @@ int CL_UISystemCalls( int *args ) {
 	case UI_CM_LERPTAG:
 		re.LerpTag( VMA(1), args[2], args[3], args[4], VMF(5), VMA(6) );
 		return 0;
+
+	case UI_CM_LOADMODEL:
+		return re.RegisterModel( VMA(1) );
 
 	case UI_S_REGISTERSOUND:
 		return S_RegisterSound( VMA(1), args[2] );
@@ -1146,8 +1149,16 @@ void CL_InitUI( void ) {
 
 	// load the dll or bytecode
 	if ( cl_connectedToPureServer != 0 ) {
-		// if sv_pure is set we only allow qvms to be loaded
-		interpret = VMI_COMPILED;
+#if defined(MACOS_X)
+		// native bundles ship with the app; use them on local/listen servers
+		if ( com_sv_running->integer || NET_IsLocalAddress( clc.serverAddress ) ) {
+			interpret = VMI_NATIVE;
+		} else
+#endif
+		{
+			// if sv_pure is set we only allow qvms to be loaded
+			interpret = VMI_COMPILED;
+		}
 	}
 	else {
 		interpret = Cvar_VariableValue( "vm_ui" );

@@ -42,6 +42,8 @@ extern "C" {
 // In macosx_input.m
 extern void Sys_InitInput(void);
 extern void Sys_ShutdownInput(void);
+extern void Sys_InputWindowReady(void);
+extern void Sys_FocusGameWindow(void);
 extern void Sys_SetMouseInputRect(CGRect newRect);
 extern CGDirectDisplayID Sys_DisplayToUse(void);
 
